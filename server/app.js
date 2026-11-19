@@ -1,29 +1,29 @@
-import express from 'express'
-import dotenv from "dotenv"
+import express from "express";
+import dotenv from "dotenv";
+import connectDB from "./db/mongoConnect.js";
+import chatRoutes from "./routes/chatRoutes.js";
+
 dotenv.config();
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-app.get("/", (req,res)=>{
-    res.send("test success!")
-})
+app.use(express.json());
 
-import { GoogleGenAI } from "@google/genai";
+app.get("/", (req, res) => {
+  res.send("test success!");
+});
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+app.use("/api/chat", chatRoutes);
 
-async function main() {
-  const interaction = await ai.interactions.create({
-    model: "gemini-3.8-flash",
-    input: "Explain how AI works in a few words",
-  });
-  console.log(interaction.output_text);
-}
+// Express 5 forwards errors thrown in async handlers here
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: "Internal server error" });
+});
 
-await main();
+await connectDB();
 
-app.listen(4000, ()=>{
-    console.log(`server running at http://localhost:4000`)
-})
-
- 
+app.listen(PORT, () => {
+  console.log(`server running at http://localhost:${PORT}`);
+});
