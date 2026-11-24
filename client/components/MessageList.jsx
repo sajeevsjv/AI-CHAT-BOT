@@ -28,6 +28,22 @@ const MessageList = ({ messages, loading }) => {
               }`}
             >
               {m.content}
+              {m.sources?.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-2 text-xs">
+                  <span className="text-gray-400">Sources:</span>
+                  {m.sources.map((s) => (
+                    <a
+                      key={s.url}
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-600 hover:underline"
+                    >
+                      {s.title}
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ))}

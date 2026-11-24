@@ -21,6 +21,12 @@ const messageSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+
+    // website pages the answer is based on (model messages only)
+    sources: {
+      type: [{ _id: false, title: String, url: String }],
+      default: undefined,
+    },
   },
   { timestamps: true }
 );

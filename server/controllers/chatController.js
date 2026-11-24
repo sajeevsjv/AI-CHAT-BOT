@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Conversation from "../db/models/conversation.js";
 import Message from "../db/models/message.js";
 import { generateReply, DEFAULT_MODEL } from "../services/geminiService.js";
+import { retrieveContext } from "../services/ragService.js";
 
 const HISTORY_LIMIT = 30; // how many past messages are sent to the model as context
 
@@ -42,9 +43,10 @@ export const sendMessage = async (req, res) => {
   // Ask the model first, so nothing is saved if generation fails
   let reply;
   try {
-    reply = await generateReply(history, message, conversation?.model ?? DEFAULT_MODEL);
+    const chunks = await retrieveContext(history, message);
+    reply = await generateReply(history, message, chunks, conversation?.model ?? DEFAULT_MODEL);
   } catch (err) {
-    console.error("Gemini error:", err);
+    console.error("Reply error:", err);
     return res.status(502).json({ error: "Failed to generate AI response" });
   }
 
@@ -58,7 +60,7 @@ export const sendMessage = async (req, res) => {
 
   const [userMessage, modelMessage] = await Message.insertMany([
     { conversationId: conversation._id, role: "user", content: message },
-    { conversationId: conversation._id, role: "model", content: reply },
+    { conversationId: conversation._id, role: "model", content: reply.answer, sources: reply.sources },
   ]);
 
   // bump updatedAt so the conversation moves to the top of the history list
