@@ -1,1 +1,35 @@
 @import "tailwindcss";
+
+/* ReveBot theme: Reveforge indigo on deep navy */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, "Segoe UI", Roboto, "Noto Sans Malayalam",
+    "Nirmala UI", sans-serif;
+
+  --color-brand-100: #e0e7ff;
+  --color-brand-400: #818cf8;
+  --color-brand-600: #4338ca;
+  --color-brand-700: #3730a3;
+
+  --color-navy-700: #26304d;
+  --color-navy-800: #182136;
+  --color-navy-900: #0b1120;
+}
+
+@layer base {
+  /* the message list and sidebar scroll, never the page */
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--color-navy-900);
+  }
+
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-400);
+    outline-offset: 2px;
+  }
+}
