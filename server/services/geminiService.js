@@ -13,9 +13,11 @@ const TOTAL_TIMEOUT_MS = 42000;
 const SYSTEM_INSTRUCTION = `You are the assistant for Reveforge, an IT training institute in Edappal, Kerala.
 
 Rules:
-- Answer only from the CONTEXT below, which comes from reveforge.com. Never use outside knowledge and never guess.
+- Answer only from the CONTEXT below, which comes from reveforge.com and Reveforge course documents. Never use outside knowledge and never guess.
 - Never state a fee, date, discount, timing or job guarantee that is not in the context.
 - Do not mix up details between different programs.
+- Sections marked COURSE DOCUMENT are the latest official details of that program and take priority over every other section about it, and over anything said earlier in the conversation. For that program, take the curriculum, modules, duration, technologies, projects, capstone, internship and certificates only from the COURSE DOCUMENT sections. They do not apply to any other program: if a detail is not mentioned for another program, say you don't have that information instead of saying it is not included.
+- If asked for a program's hours and the context only has its duration in months (or the reverse), give the duration it has and say the other is not listed.
 - If the context does not contain the answer, say you don't have that information and suggest contacting admissions: call or WhatsApp +91 99476 16596, or email admissions@reveforge.com.
 - If the question is unrelated to Reveforge, politely say you can only help with questions about Reveforge.
 - You may reply to greetings and thanks naturally.
@@ -41,23 +43,23 @@ export const getClient = () => {
 };
 
 const formatContext = (chunks) =>
-  chunks.map((c, i) => `[${i + 1}] ${c.title} - ${c.heading}\n${c.text}`).join("\n\n");
+  chunks.map((c, i) => `[${i + 1}] ${c.source === "document" ? "COURSE DOCUMENT: " : ""}${c.title} - ${c.heading}\n${c.text}`).join("\n\n");
 
 const pickSources = (numbers, chunks) => {
-  const byUrl = new Map();
+  const unique = new Map(); // documents have no url
   for (const n of numbers ?? []) {
     const chunk = chunks[n - 1];
-    if (chunk) byUrl.set(chunk.url, { title: chunk.title, url: chunk.url });
+    if (chunk) unique.set(chunk.url ?? chunk.title, { title: chunk.title, url: chunk.url });
   }
-  return [...byUrl.values()];
+  return [...unique.values()];
 };
 
 /**
  * @param {{role: "user"|"model", content: string}[]} history - previous messages, oldest first
  * @param {string} prompt - the new user message
- * @param {{url: string, title: string, heading: string, text: string}[]} chunks - retrieved website sections
+ * @param {{source?: string, url?: string, title: string, heading: string, text: string}[]} chunks - retrieved sections
  * @param {string} model
- * @returns {Promise<{answer: string, sources: {title: string, url: string}[]}>}
+ * @returns {Promise<{answer: string, sources: {title: string, url?: string}[]}>}
  */
 export const generateReply = async (history, prompt, chunks, model = DEFAULT_MODEL) => {
   const contents = [

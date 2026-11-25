@@ -1,20 +1,14 @@
 // Copies the text of reveforge.com into MongoDB for the chatbot. Run with: pnpm ingest
 // Safe to re-run whenever the website changes: only new or edited sections are embedded.
 import "dotenv/config";
-import { createHash } from "node:crypto";
 import * as cheerio from "cheerio";
 import mongoose from "mongoose";
-import connectDB from "../db/mongoConnect.js";
-import KnowledgeChunk from "../db/models/knowledgeChunk.js";
-import { embedDocuments, EMBEDDING_DIMENSIONS } from "../services/embeddingService.js";
-import { VECTOR_INDEX } from "../services/ragService.js";
+import { readCourseDocs } from "./courseDocs.js";
+import { saveChunks, splitLines } from "./saveChunks.js";
 
 const SITE = "https://reveforge.com";
-const MAX_CHUNK_CHARS = 1500;
-const EMBED_BATCH = 20;
 
 const clean = (s) => s.replace(/\s+/g, " ").trim();
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const fetchText = async (url) => {
   const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
@@ -107,22 +101,44 @@ const readSections = ($) => {
   return sections.filter((s) => s.lines.length > 0);
 };
 
-// Keeps each chunk under the limit, repeating the current sub-heading when a section is split
-const splitLines = (lines) => {
-  const parts = [];
-  let current = [];
-  let subHeading = "";
-  for (const line of lines) {
-    if (line.startsWith("## ")) subHeading = line;
-    const size = current.reduce((n, l) => n + l.length + 1, 0);
-    if (current.length > 0 && size + line.length > MAX_CHUNK_CHARS) {
-      parts.push(current);
-      current = subHeading && subHeading !== line ? [subHeading] : [];
-    }
-    current.push(line);
+// Removes the website's version of every program that has a course document, so the bot only
+// sees the document's details. Fees, batch and job guarantee answers are kept.
+const removeReplacedDetails = (docs, sections) => {
+  const pageDoc = docs.find((d) => sections.some((s) => s.heading === `${d.program} at a glance`));
+  if (pageDoc) {
+    pageDoc.pageFound = true;
+    sections = sections.filter(
+      (s) => !/( at a glance|curriculum: \d+ modules|^Capstone brief)$/i.test(s.heading)
+    );
   }
-  if (current.length > 0) parts.push(current);
-  return parts.map((p) => p.join("\n"));
+
+  return sections.map(({ heading, lines }) => {
+    let current = heading;
+    const kept = lines.flatMap((line) => {
+      if (line.startsWith("## ")) current = line.slice(3);
+
+      const isOldAnswer = docs.some(
+        (d) =>
+          line.startsWith(`Q: How long is ${d.program}?`) ||
+          (line.startsWith("Q: How are AI") && line.includes(` covered in ${d.program}?`))
+      );
+      if (isOldAnswer) return [];
+
+      // Row in the table of all programs: name, subject, hours, modules, capstone
+      const row = docs.find((d) => line.startsWith(d.program) && /\d+\+ Hours \d+ /.test(line));
+      if (row) {
+        return [line.replace(/\d+\+ Hours \d+ .*$/, () => `${row.duration} ${row.modules} ${row.capstone}`)];
+      }
+
+      // Program card: drop its hours and technology list
+      if (docs.some((d) => current === d.program || current.endsWith(`: ${d.program}`))) {
+        if (line.startsWith("- ")) return [];
+        return [line.replace(/\s*\d+\+ Hours$/, "")].filter(Boolean);
+      }
+      return [line];
+    });
+    return { heading, lines: kept };
+  });
 };
 
 // Social links and similar facts exist only in the home page's structured data
@@ -153,92 +169,36 @@ const organizationChunk = ($, url) => {
   return null;
 };
 
-const readPage = async (url) => {
+const readPage = async (url, docs) => {
   const $ = cheerio.load(await fetchText(url));
   const title = clean($("title").text()).replace(/\s*\|\s*Reveforge$/, "");
   const org = new URL(url).pathname === "/" ? organizationChunk($, url) : null;
 
-  const chunks = readSections($).flatMap(({ heading, lines }) =>
+  const chunks = removeReplacedDetails(docs, readSections($)).flatMap(({ heading, lines }) =>
     splitLines(lines).map((text) => ({ url, title, heading, text }))
   );
   if (chunks.length === 0) throw new Error(`No text found on ${url}`);
   return org ? [...chunks, org] : chunks;
 };
 
-const embedWithRetry = async (batch) => {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await embedDocuments(batch);
-    } catch (err) {
-      if (err?.status !== 429 || attempt >= 4) throw err;
-      console.log("Rate limited by Gemini, waiting 60s...");
-      await sleep(60000);
-    }
-  }
-};
-
-const ensureVectorIndex = async () => {
-  const { collection } = KnowledgeChunk;
-  const find = async () => (await collection.listSearchIndexes(VECTOR_INDEX).toArray())[0];
-
-  if (!(await find())) {
-    console.log("Creating vector search index...");
-    await collection.createSearchIndex({
-      name: VECTOR_INDEX,
-      type: "vectorSearch",
-      definition: {
-        fields: [
-          { type: "vector", path: "embedding", numDimensions: EMBEDDING_DIMENSIONS, similarity: "cosine" },
-        ],
-      },
-    });
-  }
-
-  for (let i = 0; i < 60; i++) {
-    const index = await find();
-    if (index?.queryable) return;
-    if (index?.status === "FAILED") throw new Error("Vector index build failed");
-    await sleep(3000);
-  }
-  throw new Error("Vector index was not ready after 3 minutes. Check it in the Atlas UI.");
-};
-
 const main = async () => {
+  const docs = await readCourseDocs();
+
   // Any page that fails stops the run here, before stored data is touched
   const chunks = [];
   for (const url of await getPageUrls()) {
-    const pageChunks = await readPage(url);
+    const pageChunks = await readPage(url, docs);
     console.log(`${String(pageChunks.length).padStart(3)} sections  ${url}`);
     chunks.push(...pageChunks);
   }
   if (chunks.length === 0) throw new Error("The sitemap listed no pages");
 
-  for (const c of chunks) {
-    c.hash = createHash("sha256").update([c.url, c.title, c.heading, c.text].join("\n")).digest("hex");
-  }
-  const unique = [...new Map(chunks.map((c) => [c.hash, c])).values()];
-
-  if (process.argv.includes("--dry-run")) {
-    for (const c of unique) console.log(`\n=== ${c.url}\n[${c.title} - ${c.heading}]\n${c.text}`);
-    console.log(`\n${unique.length} sections (dry run, nothing saved)`);
-    return;
+  for (const d of docs) {
+    if (!d.pageFound) throw new Error(`${d.file}: no page on the website for program "${d.program}"`);
+    console.log(`${d.program}: website details replaced by ${d.file}`);
   }
 
-  await connectDB();
-  await KnowledgeChunk.createCollection();
-
-  const stored = new Set(await KnowledgeChunk.distinct("hash"));
-  const fresh = unique.filter((c) => !stored.has(c.hash));
-  for (let i = 0; i < fresh.length; i += EMBED_BATCH) {
-    const batch = fresh.slice(i, i + EMBED_BATCH);
-    const vectors = await embedWithRetry(batch);
-    await KnowledgeChunk.insertMany(batch.map((c, j) => ({ ...c, embedding: vectors[j] })));
-    console.log(`Embedded ${i + batch.length}/${fresh.length}`);
-  }
-
-  const { deletedCount } = await KnowledgeChunk.deleteMany({ hash: { $nin: unique.map((c) => c.hash) } });
-  await ensureVectorIndex();
-  console.log(`Done: ${fresh.length} added, ${deletedCount} outdated removed, ${unique.length} total`);
+  await saveChunks(chunks, "website");
 };
 
 try {
