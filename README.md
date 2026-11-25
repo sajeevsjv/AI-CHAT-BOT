@@ -227,6 +227,33 @@ The ingestion process:
 - Removes outdated sections.
 - Creates and checks the MongoDB Vector Search index.
 
+### Course documents
+
+Course documents are Markdown files in `server/data/` (not committed to Git), one per program:
+
+```markdown
+---
+program: Forge Build
+duration: 6 Months (5 months training + 1 month internship)
+modules: 14
+capstone: E-Commerce Platform
+---
+
+# MERN Stack Curriculum: Forge Build
+
+## Module 1: ...
+```
+
+`program` must match the name on the website. After adding or editing a file, run:
+
+```bash
+pnpm ingest:all
+```
+
+A course document replaces the website's curriculum, duration and capstone for its program. Fees, batch and job guarantee answers still come from the website.
+
+**Note:** Run ingestion on a machine that has the `server/data/` files. Without them, `pnpm ingest` brings back the website's old details and `pnpm ingest:docs` stops.
+
 **Note:** The MongoDB Atlas cluster must support Vector Search. The ingestion script creates the required vector index automatically.
 
 ## 🔌 API Endpoints
@@ -257,8 +284,6 @@ https://www.mongodb.com/products/platform/atlas-database
 
 - Streaming AI responses.
 - Improved conversation memory.
-- Document and PDF-based knowledge ingestion.
-- Support for multiple knowledge sources.
 - Advanced RAG evaluation and optimization.
 - Improved authentication and user management.
 

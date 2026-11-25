@@ -5,8 +5,8 @@ export const VECTOR_INDEX = "knowledge_vector_index";
 const TOP_K = 20; // sections are short, so this is only about 3k tokens
 
 /**
- * Finds the website sections most relevant to the question.
- * @returns {Promise<{url: string, title: string, heading: string, text: string}[]>}
+ * Finds the website and document sections most relevant to the question.
+ * @returns {Promise<{source?: string, url?: string, title: string, heading: string, text: string}[]>}
  */
 export const retrieveContext = async (history, question) => {
   // Follow-ups like "what about its duration?" only make sense with the previous question
@@ -25,7 +25,7 @@ export const retrieveContext = async (history, question) => {
         limit: TOP_K,
       },
     },
-    { $project: { _id: 0, url: 1, title: 1, heading: 1, text: 1 } },
+    { $project: { _id: 0, source: 1, url: 1, title: 1, heading: 1, text: 1 } },
   ]).option({ maxTimeMS: 5000 });
 
   if (chunks.length === 0) {

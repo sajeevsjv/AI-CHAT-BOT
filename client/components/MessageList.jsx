@@ -39,17 +39,23 @@ const MessageList = ({ messages, loading }) => {
               {m.sources?.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-2 text-xs">
                   <span className="text-slate-500">Sources:</span>
-                  {m.sources.map((s) => (
-                    <a
-                      key={s.url}
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-brand-600 hover:underline"
-                    >
-                      {s.title}
-                    </a>
-                  ))}
+                  {m.sources.map((s) =>
+                    s.url ? (
+                      <a
+                        key={s.url}
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-brand-600 hover:underline"
+                      >
+                        {s.title}
+                      </a>
+                    ) : (
+                      <span key={s.title} className="text-slate-700">
+                        {s.title}
+                      </span>
+                    )
+                  )}
                 </div>
               )}
             </div>

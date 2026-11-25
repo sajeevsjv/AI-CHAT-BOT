@@ -3,6 +3,7 @@ import Header from "./Header";
 import ChatHistory from "./ChatHistory";
 import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
+import DeleteChatDialog from "./DeleteChatDialog";
 import useMediaQuery from "./useMediaQuery";
 import {
   sendMessage,
@@ -17,6 +18,8 @@ const ChatPage = () => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null); // chat awaiting confirmation
+  const newChatRef = useRef(null);
   const selectedRef = useRef(null); // latest chat picked, so slower responses are ignored
 
   // The drawer (small screens) and the column (Tailwind lg and up) open separately,
@@ -73,25 +76,40 @@ const ChatPage = () => {
     }
   };
 
-  const handleNewChat = () => {
-    if (loading) return;
-    closeDrawer();
+  const resetChat = () => {
     selectedRef.current = null;
     setActiveId(null);
     setMessages([]);
     setError("");
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm("Delete this chat?")) return;
+  const handleNewChat = () => {
+    if (loading) return;
+    closeDrawer();
+    resetChat();
+  };
+
+  // Throws on failure so the dialog can show the error and offer a retry
+  const handleDelete = async () => {
+    const id = deleteTarget._id;
     try {
       await deleteConversation(id);
-      setConversations((prev) => prev.filter((c) => c._id !== id));
-      if (id === activeId) handleNewChat();
-    } catch {
-      setError("Could not delete chat");
+    } catch (err) {
+      if (err.response?.status !== 404) throw err; // 404: already deleted elsewhere
     }
+    setConversations((prev) => prev.filter((c) => c._id !== id));
+    if (id === activeId) resetChat();
+    setDeleteTarget(null);
   };
+
+  // The deleted row takes its focused button with it, so move focus somewhere useful
+  useEffect(() => {
+    if (!deleteTarget) return;
+    const newChat = newChatRef.current;
+    return () => {
+      if (document.activeElement === document.body) newChat?.focus();
+    };
+  }, [deleteTarget]);
 
   const handleSend = async (text) => {
     setError("");
@@ -134,7 +152,8 @@ const ChatPage = () => {
           activeId={activeId}
           onSelect={handleSelect}
           onNewChat={handleNewChat}
-          onDelete={handleDelete}
+          onDelete={setDeleteTarget}
+          newChatRef={newChatRef}
           busy={loading}
           open={sidebarOpen}
           isDesktop={isDesktop}
@@ -156,6 +175,14 @@ const ChatPage = () => {
           <ChatInput onSend={handleSend} disabled={loading} />
         </main>
       </div>
+
+      {deleteTarget && (
+        <DeleteChatDialog
+          title={deleteTarget.title}
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 };

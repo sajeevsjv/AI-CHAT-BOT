@@ -1,2 +1,5 @@
 node_modules/
 .env
+
+# Curriculum source files
+server/data/

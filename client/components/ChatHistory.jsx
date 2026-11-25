@@ -8,6 +8,7 @@ const ChatHistory = ({
   onSelect,
   onNewChat,
   onDelete,
+  newChatRef,
   busy,
   open,
   isDesktop,
@@ -61,6 +62,7 @@ const ChatHistory = ({
 
         <div className="shrink-0 px-3 pt-1 pb-3 lg:pt-3">
           <button
+            ref={newChatRef}
             type="button"
             onClick={onNewChat}
             disabled={busy}
@@ -81,7 +83,7 @@ const ChatHistory = ({
             return (
               <div
                 key={c._id}
-                className={`group mb-1 flex items-center rounded-lg text-sm ${
+                className={`mb-1 flex items-center rounded-lg text-sm ${
                   active ? "bg-navy-700 text-white" : "text-slate-300 hover:bg-navy-800"
                 }`}
               >
@@ -95,14 +97,13 @@ const ChatHistory = ({
                 >
                   {c.title}
                 </button>
-                {/* Always visible on touch screens, where there is no hover */}
                 <button
                   type="button"
-                  onClick={() => onDelete(c._id)}
+                  onClick={() => onDelete(c)}
                   disabled={busy}
                   aria-label={`Delete chat: ${c.title}`}
                   title="Delete chat"
-                  className="flex size-11 shrink-0 items-center justify-center rounded-lg text-slate-400 group-hover:opacity-100 hover:text-red-400 focus-visible:opacity-100 disabled:cursor-not-allowed [@media(hover:hover)]:opacity-0"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Icon name="trash" className="size-4" />
                 </button>
