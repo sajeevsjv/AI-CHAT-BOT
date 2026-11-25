@@ -1,4 +1,4 @@
-# 🤖 Reveforge AI Chatbot
+# 🤖 Reveforge AI Chatbot - ReveBot
 
 An AI-powered website chatbot built using the **MERN Stack, Google Gemini API, MongoDB Atlas Vector Search, and Retrieval-Augmented Generation (RAG)**.
 
